@@ -2,6 +2,7 @@
 
 import codecs
 import importlib
+import unicodedata
 
 from datetime import datetime
 from cnab240 import errors
@@ -81,7 +82,7 @@ class Lote(object):
     def atualizar_codigo_registros(self):
         last_id = 0
         for evento in self._eventos:       
-             last_id = evento.atualizar_codigo_registros(last_id) 
+            last_id = evento.atualizar_codigo_registros(last_id) 
  
     @property
     def eventos(self):
@@ -102,7 +103,7 @@ class Lote(object):
         if not self._eventos:
             raise errors.NenhumEventoError()
     
-        result = [] 
+        result = []
         result.append(unicode(self.header))
         result.extend(unicode(evento) for evento in self._eventos)
         result.append(unicode(self.trailer))
@@ -117,6 +118,7 @@ class Arquivo(object):
     def __init__(self, banco, **kwargs):
         """Arquivo Cnab240.""" 
 
+        self._kwargs = kwargs
         self._lotes = []
         self.banco = banco
         arquivo = kwargs.get('arquivo')
@@ -209,7 +211,7 @@ class Arquivo(object):
         lote_cobranca = self.encontrar_lote(codigo_evento)
         
         if lote_cobranca is None:
-            header = self.banco.registros.HeaderLoteCobranca(**self.header.todict())
+            header = self.banco.registros.HeaderLoteCobranca(**self._kwargs)
             trailer = self.banco.registros.TrailerLoteCobranca()
             lote_cobranca = Lote(self.banco, header, trailer) 
             self.adicionar_lote(lote_cobranca)
@@ -223,6 +225,40 @@ class Arquivo(object):
                 header.controlecob_data_gravacao = self.header.arquivo_data_de_geracao
    
         lote_cobranca.adicionar_evento(evento)
+        # Incrementar numero de registros no trailer do arquivo
+        self.trailer.totais_quantidade_registros += len(evento)
+ 
+    def incluir_pagamento(self, codigo_evento, **kwargs):
+        evento = Evento(self.banco, codigo_evento) 
+
+        seg_a = self.banco.registros.SegmentoA(**kwargs)
+        evento.adicionar_segmento(seg_a)
+
+        seg_b = self.banco.registros.SegmentoB(**kwargs)
+        evento.adicionar_segmento(seg_b)
+
+        seg_c = self.banco.registros.SegmentoC(**kwargs)
+        evento.adicionar_segmento(seg_c)
+
+        lote_pagamento = self.encontrar_lote(codigo_evento)
+
+        if lote_pagamento is None:
+            header = self.banco.registros.HeaderLotePagamento(**self._kwargs)
+            trailer = self.banco.registros.TrailerLotePagamento()
+            # FIXME:
+            trailer.somatoria_valores = 0
+            lote_pagamento = Lote(self.banco, header, trailer) 
+            self.adicionar_lote(lote_pagamento)
+
+#            if header.controlecob_numero is None:
+#                header.controlecob_numero = int('{0}{1:02}'.format(
+#                    self.header.arquivo_sequencia,
+#                    lote_pagamento.codigo))
+#
+#            if header.controlecob_data_gravacao is None:
+#                header.controlecob_data_gravacao = self.header.arquivo_data_de_geracao
+
+        lote_pagamento.adicionar_evento(evento)
         # Incrementar numero de registros no trailer do arquivo
         self.trailer.totais_quantidade_registros += len(evento)
  
@@ -245,7 +281,13 @@ class Arquivo(object):
         self.trailer.totais_quantidade_registros += len(lote)
 
     def escrever(self, file_):
-        file_.write(unicode(self).encode('ascii'))
+        unicode_data = self._remover_acentos()
+        ascii_data = unicode_data.encode('ascii')
+        file_.write(ascii_data)
+
+    def _remover_acentos(self):
+        return unicodedata.normalize('NFKD', unicode(self)).encode('ascii',
+                                                                   'ignore')
 
     def __unicode__(self):
         if not self._lotes:

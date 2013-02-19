@@ -3,7 +3,7 @@ import os
 import json
 
 from glob import iglob
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_UP
 try:
     from collections import OrderedDict
 except ImportError:
@@ -25,14 +25,22 @@ class CampoBase(object):
     def valor(self, valor):
         if self.formato == 'alfa':
             if not isinstance(valor, unicode):
-                raise errors.TipoError(self, valor)
+                try:
+                    valor = valor and unicode(valor) or u''
+                except:
+                    raise errors.TipoError(self, valor)
             if len(valor) > self.digitos:
                 raise errors.NumDigitosExcedidoError(self, valor)
 
         elif self.decimais:
             if not isinstance(valor, Decimal):
-                raise errors.TipoError(self, valor)
-            
+                try:
+                    valor = Decimal(valor)
+                except:
+                    raise errors.TipoError(self, valor)
+
+            valor = valor.quantize(Decimal('.' + (self.decimais * '0')))
+
             num_decimais = valor.as_tuple().exponent * -1
             if num_decimais != self.decimais:
                 raise errors.NumDecimaisError(self, valor)
@@ -45,16 +53,16 @@ class CampoBase(object):
                 raise errors.TipoError(self, valor)
             if len(str(valor)) > self.digitos:
                 raise errors.NumDigitosExcedidoError(self, valor)
-        
+
         self._valor = valor
     
-
     def __unicode__(self):
         if self.valor is None:
             if self.default is not None:
                 if self.decimais:
-                    self.valor = Decimal('{0:0.{1}f}'.format(self.default, 
-                                                                self.decimais))
+                    self.valor = Decimal(
+                        '{0:0.{1}f}'.format(self.default, self.decimais)
+                        )
                 else:
                     self.valor = self.default
             else:
@@ -64,12 +72,15 @@ class CampoBase(object):
             if self.decimais:
                 valor = unicode(self.valor).replace('.', '')
                 chars_faltantes = self.digitos - len(valor)
-                return (u'0' * chars_faltantes) + valor
+                valor = (u'0' * chars_faltantes) + valor
             else:
                 chars_faltantes = self.digitos - len(self.valor)
-                return self.valor + (u' ' * chars_faltantes)
+                valor = self.valor + (u' ' * chars_faltantes)
 
-        return u'{0:0{1}d}'.format(self.valor, self.digitos)
+        else:
+            valor = u'{0:0{1}d}'.format(self.valor, self.digitos)
+
+        return valor
 
     def __repr__(self):
         return unicode(self)
@@ -120,7 +131,7 @@ class RegistroBase(object):
     def necessario(self):
         for campo in self._campos.values():
             eh_controle = campo.nome.startswith('controle_') or \
-                                            campo.nome.startswith('servico_')
+                campo.nome.startswith('servico_')
             if not eh_controle and campo.valor != None:
                 return True
 
@@ -134,14 +145,8 @@ class RegistroBase(object):
         return data_dict
     
     def fromdict(self, data_dict):
-        ignore_fields = lambda key: any((                                        
-            key.startswith('vazio'),                                             
-            key.startswith('servico_'),                                          
-            key.startswith('controle_'),                                         
-        ))
-
         for key, value in data_dict.items():
-            if hasattr(self, key) and not ignore_fields(key):
+            if hasattr(self, key):
                 setattr(self, key, value) 
 
     def carregar(self, registro_str):
@@ -193,6 +198,6 @@ class Registros(object):
             entrada = {Campo.nome: Campo}
 
             campos.update(entrada)
-        
+
         return type(cls_name, (RegistroBase, ), attrs)
 

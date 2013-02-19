@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 
 try:                                                                             
     import unittest2 as unittest
@@ -24,19 +25,12 @@ class TestRegistro(unittest.TestCase):
         self.assertEqual(self.seg_p.valor_titulo, Decimal('100.00'))  
     
     def test_escrita_campo_num_decimal(self):
-        # aceitar somente tipo Decimal
-        with self.assertRaises(errors.TipoError):
-            self.seg_p.valor_titulo = 10.0 
+        # converte valor para decimal
+        self.seg_p.valor_titulo = 10.0
+        self.assertIsInstance(self.seg_p.valor_titulo, Decimal)
+
         with self.assertRaises(errors.TipoError):
             self.seg_p.valor_titulo = '' 
-       
-        # Testa se as casas decimais estao sendo verificadas 
-        with self.assertRaises(errors.NumDecimaisError): 
-            self.seg_p.valor_titulo = Decimal('100.2')
-        with self.assertRaises(errors.NumDecimaisError): 
-            self.seg_p.valor_titulo = Decimal('1001')
-        with self.assertRaises(errors.NumDecimaisError): 
-            self.seg_p.valor_titulo = Decimal('1.000')
        
         # verifica se o numero de digitos esta sendo verificado 
         with self.assertRaises(errors.NumDigitosExcedidoError): 
@@ -71,14 +65,14 @@ class TestRegistro(unittest.TestCase):
                          u'TRACY TECNOLOGIA LTDA ME')
     
     def test_escrita_campo_alfa(self):
-        # Testa que serao aceitos apenas unicode objects
-        with self.assertRaises(errors.TipoError):
-            self.header_arquivo.cedente_nome = 'tracy' 
+        # Testa que strings serão transformadas em unicode
+        self.header_arquivo.cedente_nome = 'tracy'
+        self.assertIsInstance(self.header_arquivo.cedente_nome, unicode)
 
-        # Testa que strings mais longas que obj.digitos nao serao aceitas 
-        with self.assertRaises(errors.NumDigitosExcedidoError):
+        # Testa que strings mais longas que obj.digitos nao serao aceitas
+        with self.assertRaises(errors.NumDigitosExcedidoError): 
             self.header_arquivo.cedente_convenio = u'123456789012345678901'
-       
+
         # Testa que o valor atribuido foi guardado no objeto 
         self.header_arquivo.cedente_nome = u'tracy' 
         self.assertEqual(self.header_arquivo.cedente_nome, 'tracy')
@@ -105,7 +99,7 @@ class TestRegistro(unittest.TestCase):
     def test_unicode(self):
         def unicode_test(seg_instance, seg_str):
             seg_gen_str = unicode(seg_instance)
-            
+
             self.assertEqual(len(seg_gen_str), 240)
             self.assertEqual(len(seg_str), 240)
             self.assertEqual(seg_gen_str, seg_str) 
